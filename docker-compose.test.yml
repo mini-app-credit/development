@@ -1,0 +1,46 @@
+# Test-only infra (CI / local integration tests)
+services:
+  mini-credit-postgres-test:
+    image: pgvector/pgvector:pg17
+    container_name: mini-credit-postgres-test
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: minicredit-test
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    shm_size: "512m"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - test-net
+
+  mini-credit-redis-test:
+    image: redis:7-alpine
+    container_name: mini-credit-redis-test
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-test-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - test-net
+
+networks:
+  test-net:
+    driver: bridge
+
+volumes:
+  postgres-test-data:
+  redis-test-data:

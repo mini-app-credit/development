@@ -1,0 +1,191 @@
+# Mini Credit — full local stack (infra + apps)
+# Usage: make up | make dev-up (from development/)
+
+services:
+  mini-credit-postgres:
+    image: pgvector/pgvector:pg17
+    container_name: mini-credit-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: minicredit
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    shm_size: "1g"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal-net
+
+  mini-credit-redis:
+    image: redis:7-alpine
+    container_name: mini-credit-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - internal-net
+
+  mini-credit-mailpit:
+    image: axllent/mailpit:latest
+    container_name: mini-credit-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - internal-net
+
+  mini-credit-postgres-init:
+    build:
+      context: ./provisioning/postgres
+      dockerfile: Dockerfile
+    container_name: mini-credit-postgres-init
+    depends_on:
+      mini-credit-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_WRITE_URL: postgresql://postgres:postgres@mini-credit-postgres:5432/minicredit
+    restart: "no"
+    networks:
+      - internal-net
+
+  mini-credit-api:
+    platform: linux/amd64
+    build:
+      context: ../app
+      dockerfile: Dockerfile
+      target: production
+    container_name: mini-credit-api
+    command: node dist/apps/api/apps/api/src/main.js
+    ports:
+      - "3000:3000"
+    # Explicit DB URLs: env_file ${VAR} interpolation is unreliable across Compose versions;
+    # without this, DATABASE_WRITE_URL may resolve to localhost inside the container.
+    environment:
+      DATABASE_WRITE_URL: postgresql://postgres:postgres@mini-credit-postgres:5432/minicredit
+      DATABASE_READ_REPLICA_URLS: postgresql://postgres:postgres@mini-credit-postgres:5432/minicredit
+    env_file:
+      - vendor.env
+      - deployment/deployment.env
+      - deployment/sensitive.env
+      - derived.env
+    depends_on:
+      mini-credit-postgres:
+        condition: service_healthy
+      mini-credit-redis:
+        condition: service_healthy
+    networks:
+      - public-net
+      - internal-net
+    restart: unless-stopped
+    develop:
+      watch:
+        - action: rebuild
+          path: ../app/src
+
+  mini-credit-worker:
+    platform: linux/amd64
+    build:
+      context: ../app
+      dockerfile: Dockerfile
+      target: production
+    container_name: mini-credit-worker
+    command: node dist/apps/worker/apps/worker/src/main.js
+    environment:
+      DATABASE_WRITE_URL: postgresql://postgres:postgres@mini-credit-postgres:5432/minicredit
+      DATABASE_READ_REPLICA_URLS: postgresql://postgres:postgres@mini-credit-postgres:5432/minicredit
+    env_file:
+      - vendor.env
+      - deployment/deployment.env
+      - deployment/sensitive.env
+      - derived.env
+    depends_on:
+      mini-credit-postgres:
+        condition: service_healthy
+      mini-credit-redis:
+        condition: service_healthy
+    networks:
+      - internal-net
+    restart: unless-stopped
+
+  mini-credit-frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: mini-credit-frontend
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      API_URL: http://mini-credit-api:3000
+      COOKIE_SECRET: ${FRONTEND_COOKIE_SECRET:-dev-cookie-secret}
+    depends_on:
+      mini-credit-api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    networks:
+      - public-net
+    restart: unless-stopped
+    develop:
+      watch:
+        - action: rebuild
+          path: ../frontend/src
+
+  mini-credit-templates:
+    build:
+      context: ../templates
+      dockerfile: Dockerfile
+    container_name: mini-credit-templates
+    environment:
+      CLIENT_URL: ${TEMPLATES_CLIENT_URL:-http://localhost:4000}
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3100/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal-net
+    restart: unless-stopped
+
+networks:
+  public-net:
+    driver: bridge
+  internal-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:

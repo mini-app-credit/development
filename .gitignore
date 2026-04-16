@@ -1,0 +1,4 @@
+sensitive.env
+deployment/
+*.pem
+*.key

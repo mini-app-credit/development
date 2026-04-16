@@ -1,0 +1,52 @@
+# Dev overrides: bind-mount sources + hot reload (make dev-up)
+services:
+  mini-credit-api:
+    build: !reset null
+    image: node:22-slim
+    command: sh -c "npm install --prefer-offline && npm run start:dev"
+    working_dir: /app
+    volumes:
+      - ../app:/app
+      - backend-node-modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+
+  mini-credit-worker:
+    build: !reset null
+    image: node:22-slim
+    command: sh -c "npm install --prefer-offline && npm run app:worker:dev"
+    working_dir: /app
+    volumes:
+      - ../app:/app
+      - backend-node-modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+
+  mini-credit-frontend:
+    build: !reset null
+    image: node:22-slim
+    command: sh -c "npm install --prefer-offline && npm run dev"
+    working_dir: /app
+    volumes:
+      - ../frontend:/app
+      - frontend-node-modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+      API_URL: http://mini-credit-api:3000
+      COOKIE_SECRET: ${FRONTEND_COOKIE_SECRET:-dev-cookie-secret}
+
+  mini-credit-templates:
+    build: !reset null
+    image: node:22-slim
+    command: sh -c "npm install --prefer-offline && npm run dev"
+    working_dir: /app
+    volumes:
+      - ../templates:/app
+      - templates-node-modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+
+volumes:
+  backend-node-modules:
+  frontend-node-modules:
+  templates-node-modules:
