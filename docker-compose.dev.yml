@@ -33,6 +33,7 @@ services:
     environment:
       NODE_ENV: development
       API_URL: http://mini-credit-api:3000
+      NODE_OPTIONS: --dns-result-order=ipv4first
       COOKIE_SECRET: ${FRONTEND_COOKIE_SECRET:-dev-cookie-secret}
 
   mini-credit-templates:

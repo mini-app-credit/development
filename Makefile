@@ -103,9 +103,10 @@ hosts-add: ## Add local domains to /etc/hosts (requires sudo)
 
 ##@ Application
 
+# up: no --wait — mini-credit-postgres-init exits 0 after extensions; compose --wait treats that as failure.
 up: validate ## Build images and start full stack (postgres, redis, mailpit, api, worker, frontend, templates)
 	@echo "$(CYAN)Starting Mini Credit stack...$(NC)"
-	@$(COMPOSE_STACK) up -d --build --wait --remove-orphans
+	@$(COMPOSE_STACK) up -d --build --remove-orphans
 	@echo ""
 	@echo "$(GREEN)✓ Mini Credit running:$(NC)"
 	@echo "  http://localhost:4000  frontend"
